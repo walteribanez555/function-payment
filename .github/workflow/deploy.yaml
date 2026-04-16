@@ -1,0 +1,35 @@
+name: Build & Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login a GitHub Container Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
+            -u walteribanez555 --password-stdin
+
+      - name: Build & Push imagen
+        run: |
+          IMAGE=ghcr.io/walteribanez555/${{ github.event.repository.name }}
+          docker build -t $IMAGE:${{ github.sha }} -t $IMAGE:latest .
+          docker push $IMAGE:${{ github.sha }}
+          docker push $IMAGE:latest
+
+      - name: Actualizar imagen en manifests
+        run: |
+          IMAGE=ghcr.io/walteribanez555/${{ github.event.repository.name }}
+          sed -i "s|image:.*|image: $IMAGE:${{ github.sha }}|" manifests/ksvc.yaml
+          git config user.email "ci@bot.com"
+          git config user.name "CI Bot"
+          git add manifests/ksvc.yaml
+          git commit -m "deploy: update image to ${{ github.sha }}"
+          git push
